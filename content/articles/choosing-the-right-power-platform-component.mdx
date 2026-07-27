@@ -1,0 +1,330 @@
+---
+title: "Choosing the Right Power Platform Component"
+description: "How to read a requirement, name the signals it contains, and pick the component that owns the center of gravity — with the condition that would change your mind."
+date: "2026-07-26"
+category: "Architecture"
+tags:
+  - Power Platform
+  - Architecture Signals
+  - Solution Design
+  - Governance
+  - ALM
+featured: true
+status: "published"
+---
+
+Product-first selection, then requirements bent to fit the tool, then a rebuild at month nine.
+
+That chain runs through most Power Platform programs, and it does not start with a bad developer. It starts with the documentation. Nearly every article, learning path, and vendor session answers the same question: what is this product and what can it do?
+
+Architects need a different question answered. Given this problem, why choose X instead of Y?
+
+That is not a feature list. It is a decision discipline, and it is teachable. This is the first entry in Architecture Signals.
+
+## The decision philosophy
+
+Stop asking “should we build a canvas app?” The question already contains its answer, and it invites a defense of the tool instead of an examination of the problem.
+
+Ask this instead: what characteristics does this problem have?
+
+<SignalFlow caption="Requirement language is the input. Signals are what you extract from it. The architecture is downstream of both." />
+
+The vocabulary in a requirement is never incidental. When an analyst writes “the case owner needs to see all related contacts and their open activities,” they have described a relational data experience whether they know it or not. When a field supervisor says “the tech captures a signature with no bars of service,” they have described a task experience. Same platform, opposite architecture.
+
+Three rules keep this honest.
+
+1. One signal is a hypothesis. Two agreeing signals is a decision.
+2. Signals identify the component that owns the center of gravity, not the whole architecture. Real solutions use three or four components. The question is which one is load-bearing.
+3. Every signal has a condition that flips it. If you cannot state what would change your mind, you are not doing architecture. You are doing preference.
+
+That third rule is why the matrix further down has a fourth column most decision guides leave out.
+
+## The architect’s mental model
+
+Before the matrix, the frame that makes the matrix work.
+
+Do not memorize seven products. Memorize ten responsibilities, then ask which one the requirement is describing.
+
+| Responsibility | Component |
+|---|---|
+| System of record | Dataverse |
+| Data experience | Model-driven app |
+| Task experience | Canvas app |
+| External experience | Power Pages |
+| Process orchestration | Power Automate |
+| Conversation and tool use | Copilot Studio |
+| Discrete AI capability | AI prompts and AI hub models |
+| Integration boundary | Custom connector, API Management |
+| Enterprise integration | Azure Integration Services |
+| Governance and ALM | Managed solutions, pipelines, environment strategy |
+
+Products get renamed, merged, and repriced. Responsibilities do not. Architects who reason in responsibilities survive the release notes.
+
+This is also why the next section is not a product comparison, even though it names products in every row. Each row maps a phrase you will hear in a requirements meeting onto one of the responsibilities above. The product name is the current answer to that responsibility, and the current answer is the part most likely to change.
+
+## The requirement signal matrix
+
+| Requirement signal | Start with | Do not start with | Why | What flips it |
+|---|---|---|---|---|
+| Hundreds of related business records | Model-driven app | Canvas app | Metadata delivers forms, views, relationships, and role-based security for free | One high-frequency task covers 90% of usage. Put canvas in front of the same Dataverse tables. |
+| Guided task, prescribed screen sequence | Canvas app | Model-driven app | Screen sequencing and custom UX are the product | Screen count creeps past 15 to 20, or CRUD spans more than three or four related tables |
+| External authenticated users | Power Pages | Sharing internal apps outward | The identity boundary changed, and so did the license boundary | A small, stable partner set you can license as B2B guests in your own tenant |
+| Multi-step process with waits, retries, escalation | Power Automate | Canvas formulas | Durable orchestration, retry, escalation, and run history | Sub-second synchronous logic on save (plug-in or business rule), or a process that outlives the 30 day run duration (state in Dataverse plus a scheduled evaluator) |
+| Multi-turn conversational assistant | Copilot Studio | A flow pretending to be a chatbot | Reasoning, tool calls, grounding, and human escalation | A question with one right answer that search or a query can return, or users already licensed for Microsoft 365 Copilot over the same content |
+| One input, one output text generation | AI prompt, called from a flow, app, or agent | A full agent | A stateless step needs no orchestrator, no memory, and no runtime tool selection | The task needs memory across turns or runtime tool selection |
+| Same API called from several places | Custom connector or API Management | HTTP actions everywhere | Governed boundary, credential handling, DLP classification | A genuine one-off with a single consumer. Do not build a connector for one caller. |
+
+Print it, then make it yours. Add the signals specific to your landscape, the ones that exist only because of a system you inherited or a constraint you cannot move, and run them through the same four columns. The value is not in these seven rows. It is in the discipline: name what you heard, name what it points at, name what it rules out, name what would change your mind. A matrix built from your own requirements will beat this one in your own design reviews, where it belongs as an input rather than as the agenda.
+
+One structural note before you use it. The rows are not all the same kind of thing, and pretending otherwise causes bad conversations. The first five name a surface or a runtime: something you build, deploy, and hand to a user, or something that executes without a user present. The last two name an invoked capability: something that only ever runs inside one of the first five. A prompt is never the answer to “what should we build.” It is the answer to “what should this step be.” Connectors are the same. They sit in the matrix because the decision to reach for one arrives at the same moment as the others, not because they occupy the same architectural layer.
+
+## The signals in depth
+
+Each signal below runs the same five slots: what to listen for, what to recommend, why, what to avoid, and what would flip the decision. Where a signal has more underneath it, the depth comes after the five slots in a named block, so the top of every section stays scannable.
+
+### Signal: “Users need to browse lots of related records”
+
+**Listen for:** customer, account, opportunity, case, contact, parent-child, related records, security roles, business units, views, dashboards, assignment, ownership.
+
+<Decision kind="recommend">Model-driven app.</Decision>
+
+**Why:** model-driven applications are generated from metadata rather than assembled by hand. Forms, views, charts, related grids, business process flows, and role-based security are platform behavior, not build effort. Every one of those is a sprint nobody spent.
+
+**Avoid:** canvas-first architecture. Canvas is excellent at task completion and becomes progressively more expensive as relationship complexity grows. The cost curve is not linear. I have watched it bend sharply around the fourth related table.
+
+<Decision kind="flips">A single workflow that represents the overwhelming majority of user time. Field service dispatch on top of a full case model is a legitimate canvas app sitting on Dataverse. That is not a canvas-versus-model-driven decision. That is both, deliberately.</Decision>
+
+### Signal: “I need inspectors in the field”
+
+**Listen for:** the sentences, not the hardware, and not only the field. The same signal shows up on a warehouse floor, a loading dock, and a service counter. “They do this two hundred times a shift.” “The tech has about thirty seconds at the door.” “There is no signal in the yard.” “They are wearing gloves.” “One hand is holding the scanner.”
+
+Repetition, a hostile environment, and a hard ceiling on how long a single transaction can take. That combination is the signal. The hardware nouns usually quoted here — camera, barcode, signature, GPS — do not discriminate at all, because every surface on the platform can reach device capability. Hardware is how the task gets done. The task is what tells you where to build it.
+
+<Decision kind="recommend">Canvas app.</Decision>
+
+**Why:** canvas optimizes task completion rather than relationship exploration. You control the screen order, the tap count, and the offline behavior. When the requirement is “four taps and done, in a warehouse with no signal,” metadata-generated UI is working against you.
+
+**Avoid:** model-driven with a mobile skin, and the assumption that offline is a checkbox. Offline is a data model decision that has to be made before the first screen exists.
+
+<Decision kind="flips">Back-office users needing the same records with full relationship context. Build the canvas app for the field, and let the office use a model-driven app over the identical tables. One data model, two experiences.</Decision>
+
+#### When they say “easy to use”
+
+One phrase belongs in this section and needs handling rather than listing. “It has to be easy to use.” “Low friction.” “User friendly.” Everyone says it and nobody asks for the opposite, so on its own it tells you nothing. It becomes a signal after one follow-up question: easy for whom, and how often do they use it? Three answers, three different architectures.
+
+- “They will never be trained and they touch it twice a year.” Strong canvas signal. A canvas app can be constrained to exactly one path. A model-driven app hands an occasional user a navigable surface they did not ask for and cannot mentally map.
+- “The current system takes too many clicks.” Usually a task experience problem rather than a system problem. Canvas over the same tables, not a rebuild. This is the phrase that gets misread into replacement projects.
+- “They will not adopt it unless it looks good.” Frequently not an architecture question at all. That is change management risk arriving dressed as a requirement, and building a different app does not resolve it.
+
+Watch for the inversion. Easy for a novice and efficient for an expert are opposite designs. A dispatcher working the same screen four hundred times a shift wants density, keyboard access, and no wizard anywhere near them. When “user friendly” is quoted on that person’s behalf, it is often someone else’s preference projected onto them, and every time I have followed it the result was an application the actual users resented.
+
+### Signal: “My customers need to log in”
+
+**Listen for:** customer, partner, vendor, applicant, citizen, self-service, portal, register, public.
+
+<Decision kind="recommend">Power Pages.</Decision>
+
+**Why:** the identity boundary moved. This is no longer an employee application, and the license, security, and exposure models all change with it. Power Pages provides external identity, table permissions, web roles, and a public web surface designed for anonymous and authenticated traffic.
+
+**Avoid:** treating an internal app as a portal substitute at consumer scale, and assuming guest access is free. Sharing canvas and model-driven apps with Microsoft Entra B2B guests is supported and documented, not a workaround. It is also licensed. The guest needs [the same license a non-guest would need to run the app](https://learn.microsoft.com/en-us/power-platform/admin/powerapps-flow-licensing-faq#power-apps), and when the app is backed by Dataverse that license has to come from the tenant where the Dataverse data lives rather than from the guest’s own tenant. Per-app licensing is scoped to the environment its capacity is assigned to. Guest access also has to be unblocked at the environment level before any of it works.
+
+<Decision kind="flips">A small, stable external population you already trust with an identity in your directory, doing the same work your staff does.</Decision>
+
+#### Why the seat price is the wrong place to start
+
+The argument people reach for first is seat price. What is worth knowing is the shape of the model rather than the rates.
+
+Power Pages authenticated access sells in [capacity packs of 100 users](https://learn.microsoft.com/en-us/power-platform/admin/powerapps-flow-licensing-faq#power-pages) — the same 100 at every tier — purchased per website and assigned to environments. Unused capacity does not carry forward; it is a monthly rate against anticipated volume, not an asset that accumulates. A metered alternative bills per unique authenticated user per website per month, counting anyone who logged in at least once, and it is [still labelled preview](https://learn.microsoft.com/en-us/power-platform/admin/pay-as-you-go-meters) in Microsoft’s own documentation. That is a different kind of commitment than a subscription, and it belongs in the decision.
+
+Two things make this an environment and site design decision before it is a procurement one.
+
+The first is that enabling pay-as-you-go on an environment does not put the two models side by side. Prepaid Power Pages capacity assigned to that environment is ignored and not consumed — you keep owning capacity that does nothing until you reallocate it elsewhere. Being ignored is worse than being blocked, because nothing fails and nobody notices. Do not generalize the rule past the products it applies to: prepaid and metered Power Automate explicitly do coexist in one environment.
+
+The second is that capacity is consumed only by users who are not already licensed. A user holding a Power Apps per-user license or a Dynamics 365 enterprise license that grants website access is not counted against Power Pages capacity at all. So who you put on the site determines what you buy, and a site mixing licensed staff with unlicensed externals has a cost model you cannot read off a seat count. Trial and private-mode sites are not metered either, which is why development and testing are not the thing to budget for.
+
+<Callout type="warning">
+Which option wins for twelve users depends on rates Microsoft revises. Run both numbers against current pricing rather than trusting a figure in an article, including this one. Check existing entitlements first, because [Dynamics 365 enterprise licenses already carry Power Pages use rights](https://learn.microsoft.com/en-us/power-platform/admin/powerapps-flow-licensing-faq#power-pages) that can make the comparison moot.
+</Callout>
+
+The durable argument is surface area. A portal is a second security model, a second ALM path, and a second thing to patch. For twelve partner users doing staff work, that is disproportionate. For twelve hundred unknown customers, it is the only correct answer.
+
+### Signal: “It needs approvals”
+
+**Listen for:** approval, notify, escalate, reminder, SLA, timer, schedule, retry, handoff, sync to.
+
+<Decision kind="recommend">Power Automate.</Decision>
+
+**Why:** those words describe orchestration generally, with approvals as the vivid case. Orchestration has state, duration, failure modes, and an audit trail. Cloud flows give you run history and retry semantics for free, and run history is what you will actually need at 2am.
+
+**Avoid:** orchestration inside canvas formulas. A process that lives in a button’s OnSelect only runs while a human has the app open. That is not automation. That is a person plus hope.
+
+<Decision kind="flips">More conditions than any other row in this guide, and that is a finding rather than an accident. Orchestration has more neighbors than any other responsibility on the platform, which is exactly why “just use a flow” is the most common default and the most commonly wrong one.</Decision>
+
+- The logic must run synchronously on save, through every entry point including the API. Plug-in or real-time workflow.
+- The requirement is to walk a user through visible stages. That is a business process flow in a model-driven app, not a cloud flow running out of sight.
+- The approval already exists in the source system. If the ERP or the Dynamics app owns that state transition, a parallel flow approval creates a second source of truth and a reconciliation problem nobody scoped.
+- Throughput is the real constraint rather than coordination. Cloud flows draw on per-license daily request entitlements, slow down when they exceed them, and get switched off after sustained violation. High-volume integration belongs in Azure Integration Services. The tell is a requirement measured per second instead of per day.
+- The process outlives the run duration ceiling. This one does not move you off Power Automate. It changes the shape of what you build.
+
+#### The ceiling nobody plans for
+
+A cloud flow run is [capped at 30 days](https://learn.microsoft.com/en-us/power-automate/limits-and-config#duration-limits), measured from the moment the trigger fires, and that window covers every pending step inside it. An approval still sitting unanswered in someone’s inbox on day 31 does not resume. It times out. This is not a licensing tier you can buy your way past — the published limit carries no per-plan variation. It comes from the orchestration engine underneath.
+
+So the design rule is this: never model a business wait as a technical wait. If the process can plausibly exceed a month, and contract negotiation, annual review, vendor onboarding, and dispute resolution all can, then the state belongs in Dataverse and the flow becomes the thing that moves it one step. One flow raises the request. A separate flow reacts to the response. What you have built is a state machine with durable state, which is what a long process needed in the first place.
+
+#### Three more limits worth knowing
+
+- **Inactivity.** A flow [not triggered within 90 days](https://learn.microsoft.com/en-us/power-automate/limits-and-config#retention-limits) may be turned off. Flows owned by users holding premium licenses or assigned capacity licenses are exempt, and owners and co-owners are notified 30 days before it happens. An annual process running on a standard license is a support ticket waiting for its anniversary.
+- **Failure and throttling.** Two more shutoffs sit next to that one, both at 14 days: a flow whose trigger or actions fail continuously gets turned off, and so does a flow that is consistently throttled. Neither is a licensing problem. Both are design problems with a two-week fuse.
+- **Run history.** Retained for 30 days. It is a debugging tool, not an audit trail. When the requirement says evidence or retention, write the evidence to Dataverse yourself and stop treating run history as a compliance artifact.
+
+### Signal: “It should answer questions”
+
+**Listen for:** ask, chat, conversation, follow-up, clarify, reasoning, grounded, hand off to an agent, knowledge base.
+
+<Decision kind="recommend">Copilot Studio.</Decision>
+
+**Why:** the requirement is multi-turn. Follow-up questions, clarification, tool selection, and escalation to a human are the actual product. Deterministic automation cannot fake that, and attempting it produces a decision tree that nobody will maintain.
+
+**Avoid:** building conversation branching in a flow. Also avoid the reverse failure: an agent that performs approvals. Agents should call the flow that owns the approval, not reimplement it.
+
+<Decision kind="flips">Two conditions, and they are not the same condition.</Decision>
+
+The first is that the question has one right answer a query or a search index can return. Do not buy conversational infrastructure for a lookup.
+
+The second is overlap, and it is the one that gets skipped in design reviews. If the content already lives in Microsoft Graph and the users are already licensed for Microsoft 365 Copilot, a custom agent answering questions about that content is a second implementation of something the organization is already paying for. Microsoft’s [published Copilot Studio rates](https://learn.microsoft.com/en-us/microsoft-copilot-studio/requirements-messages-management) make the same point from the billing side: employee-facing usage by a Microsoft 365 Copilot licensed user carries no charge across classic answers, generative answers, agent actions, and tenant graph grounding. When both the architecture and the meter point the same direction, the justification for building has to be action rather than answers. The agent earns its existence by doing something in a line of business system that the licensed product cannot reach.
+
+### Signal: “We just need it to summarize this”
+
+**Listen for:** summarize, classify, extract, rewrite, translate, score, tag.
+
+<Decision kind="recommend">An AI prompt in the AI hub, invoked from a flow or attached as a tool to an agent.</Decision>
+
+**Why:** one input, one output, called at a known point in a process. Not every AI requirement needs an agent, and the industry currently has that ratio badly wrong.
+
+**Avoid:** standing up an agent to perform a stateless operation. An agent exists to hold context across turns and to choose between tools at runtime. A summarize step does neither. What it inherits instead is everything the agent brings whether or not the step uses it: an orchestrator to configure, topics and triggers to maintain, a conversation model to reason about, and a second set of meters to forecast. Agent actions such as triggers and topic transitions bill on their own rate, tenant graph grounding bills on another, and a reasoning model bills on two meters at once — the feature rate for the action plus a premium rate for the reasoning itself. None of that buys a summarize step anything.
+
+<Decision kind="flips">The task requires memory across turns, or the model must choose between tools at runtime. That is agent territory, and the extra meters are then buying you something.</Decision>
+
+<Callout type="note">
+On cost, know the shape and price it yourself. The rate for the model call is published per 1,000 tokens and does not change with the caller — the same prompt costs the same invoked from a flow, an app, or an agent. What differs is which currency pays for it and which meters run alongside it, and both of those move. AI Builder credit entitlements seeded into existing licenses are being retired; confirm the current date and the current rates against [the AI Builder licensing docs](https://learn.microsoft.com/en-us/ai-builder/message-management) and the [Copilot Studio billing rates](https://learn.microsoft.com/en-us/microsoft-copilot-studio/requirements-messages-management) before a per-record AI pattern depends on either.
+</Callout>
+
+### Signal: “We call this API from six places”
+
+**Listen for:** integration, third party, our vendor’s API, token, rate limit, we already built that once.
+
+<Decision kind="recommend">A custom connector, or API Management in front of it when the API is shared across more than one platform.</Decision>
+
+**Why:** duplicated HTTP actions have no governed boundary. Credentials get pasted, DLP cannot classify them coherently, and a breaking change from the vendor becomes a hunt across environments.
+
+**Avoid:**
+
+<AntiPattern label="HTTP action" count={4} caption="The same call, four times, with no governed boundary between them and the vendor." />
+
+<Decision kind="flips">A genuine single consumer with no reuse horizon. Connectors have their own maintenance and ALM cost. One caller does not justify it.</Decision>
+
+## The signals nobody writes in the requirements document
+
+These four decide more architectures than anything in the functional spec.
+
+**The licensing signal.** Cost model is an architecture input, not a procurement afterthought. Premium connectors, per-app versus per-user, authenticated Power Pages capacity, and metered AI consumption all change the shape of the right answer. A design that is technically elegant and unfundable is a wrong design.
+
+**The ownership signal.** Ask who maintains this in eighteen months. If the answer is a business unit, bias toward what that unit can actually change, with a managed pipeline behind it. Choosing model-driven and Dataverse for a team with no Dataverse skills produces an application nobody can modify and a support ticket queue that lands on you.
+
+**The data gravity signal.** If the system of record already exists in Dataverse or Dynamics, model-driven wins by default and the debate is theater. If it lives in SAP or on a mainframe, the real decision is the integration boundary, not the UI. If it lives in a spreadsheet on a file share, you do not have an app problem. You have a data model problem, and the first deliverable is the data model.
+
+**The audit signal.** Words like SOX, PII, retention, segregation of duties, and evidence pull the solution toward Dataverse, environment separation, managed solutions, and a documented ALM path. They also disqualify a SharePoint list as a system of record far more often than delivery teams expect.
+
+## Common architectural smells
+
+| Smell | Usually means |
+|---|---|
+| Twenty-five screens in a canvas app | Should have been model-driven |
+| Thousands of Patch calls | Data model problem wearing an app costume |
+| The same HTTP action in six flows | Missing connector boundary |
+| An agent performing approvals | Should call a flow, not replace one |
+| A flow generating every piece of AI text | Should be a reusable prompt |
+| Power Pages serving only employees | Wrong product, wrong licenses |
+| A flow waiting weeks for an approval | Should be durable state plus a scheduled evaluator |
+| Excel as the system of record | Dataverse decision was deferred, not made |
+| Business logic in three layers at once | No agreed logic placement standard |
+| One environment for everything | No ALM strategy, and an incident waiting for a date |
+
+I have never presented this table to a room that did not respond to it faster than to any feature comparison, and the reason is not subtle: everyone in the room has shipped at least two of these.
+
+## A worked example
+
+A composite, assembled from the shape these conversations usually take rather than from one engagement.
+
+Contoso Field Services runs safety inspections on distribution assets. The analyst’s requirement reads:
+
+> Inspectors need to complete safety inspections on site and record findings against the asset, the work order, and any prior open defects on that asset. Supervisors need to see all open inspections by region and reassign them. It has to work with no signal in the field, and it has to be easy to use.
+
+**Name what you heard.** Four signals, and they do not agree.
+
+1. “Findings against the asset, the work order, and any prior open defects” — three related tables, minimum. Relational. Points at model-driven.
+2. “No signal in the field” plus a technician standing at an asset — constrained, repetitive, offline. Points at canvas.
+3. “See all open inspections by region and reassign them” — views, filtering, ownership, assignment. Points at model-driven again.
+4. “Easy to use” — tells you nothing yet.
+
+**Resolve the conflict.** Signals 1 and 3 agree with each other. Signal 2 disagrees with both. Rule 2 applies: signals identify the component that owns the center of gravity, and here there are two populations doing different work over one data model. That is not a tie to break. It is two experiences to build.
+
+Signal 4 resolves with the follow-up question. Easy for whom, how often? The answer comes back: inspectors run fifteen to twenty inspections a shift, every shift. That is an expert, not a novice — density and tap count, no wizard. Had the answer been “twice a year, never trained,” the same phrase would have pointed somewhere quite different.
+
+**The decision.** Dataverse owns the system of record: asset, work order, inspection, defect. A canvas app serves inspectors, offline-first, with the offline data model settled before the first screen is drawn. A model-driven app serves supervisors over the identical tables, using platform views, assignment, and role-based security rather than built ones. Load-bearing component: Dataverse. The apps are two experiences over it.
+
+**The decision record.**
+
+```
+Requirement:  Field safety inspections against related assets, work
+              orders, and prior defects; supervisor reassignment by
+              region; offline in the field
+Signals:      Relational depth (3+ tables) + supervisor views and
+              assignment → data experience
+              Repetition + no connectivity + per-transaction ceiling
+              → task experience
+Chosen:       Dataverse as system of record; canvas app for
+              inspectors; model-driven app for supervisors
+Flips it:     Inspectors stop needing defect history at the asset,
+              collapsing capture to a single flat form — then the
+              canvas app stands alone and Dataverse is arguable
+Deferred:     Offline conflict resolution strategy — blocks the
+              canvas build, not the model decision
+```
+
+That record is the artifact a design review needs. The recommendation is the cheap part; the two signals and the flip condition are what make it reviewable by someone who was not in the room.
+
+## Decision trees
+
+**Do I need a user interface?**
+
+<DecisionTree kind="ui" caption="The identity question comes first, because it changes the license and security model, not just the UI." />
+
+**Do I need automation?**
+
+<DecisionTree kind="automation" caption="Both leaves on the right are cheaper than the left one. Reach for the agent only when the conversation is the product." />
+
+Both trees assume the data model question is already settled. If it is not, stop and settle it. Every branch above is cheap to change later. The data model is not.
+
+## The decision checklist
+
+The skill is not knowing what each product does. That information is free and it expires.
+
+Run this in the design review, out loud, for every component you are proposing:
+
+1. **Name the responsibility.** Which of the ten does this requirement actually describe? If you cannot pick one, the requirement is still two requirements.
+2. **Name two agreeing signals.** Quote the requirement language, not your summary of it. One signal means you have a hypothesis and should keep listening.
+3. **Name what you are ruling out, and why.** The rejected option is the part a reviewer can actually argue with.
+4. **Name the condition that would flip it.** No condition means preference, not architecture. Write it down where the next person will find it.
+5. **Check the four unwritten signals.** Licensing, ownership, data gravity, audit. None of them will be in the document, and any one of them can invalidate everything above.
+
+Do that consistently and the architecture stops being a preference argument.
+
+## Coming next
+
+Architecture Signals takes one decision at a time and goes deep. Next up:
+
+- Model-driven versus canvas
+- Dataverse versus SharePoint lists
+- Copilot Studio versus AI prompts
