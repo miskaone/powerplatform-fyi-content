@@ -307,6 +307,8 @@ That record is the artifact a design review needs. The recommendation is the che
 
 Both trees assume the data model question is already settled. If it is not, stop and settle it. Every branch above is cheap to change later. The data model is not.
 
+That is the case for working schema-first: settle the question in the model, once, and let every surface inherit the answer instead of restating it. The data model is the first design decision, not the last implementation detail — and the cost of getting that backwards is not a slower build. It is the same decision re-made at every point of use, in as many places as there are surfaces.
+
 ## The decision checklist
 
 The skill is not knowing what each product does. That information is free and it expires.
