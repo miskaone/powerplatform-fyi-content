@@ -1,6 +1,6 @@
 ---
 title: "Choosing the Right Power Platform Component"
-description: "How to read a requirement, name the signals it contains, and pick the component that owns the center of gravity — with the condition that would change your mind."
+description: "How to read a requirement, name the signals it contains, and pick the component that owns the center of gravity, with the condition that would change your mind."
 date: "2026-07-26"
 category: "Architecture"
 tags:
@@ -98,7 +98,7 @@ Each signal below runs the same five slots: what to listen for, what to recommen
 
 **Listen for:** the sentences, not the hardware, and not only the field. The same signal shows up on a warehouse floor, a loading dock, and a service counter. “They do this two hundred times a shift.” “The tech has about thirty seconds at the door.” “There is no signal in the yard.” “They are wearing gloves.” “One hand is holding the scanner.”
 
-Repetition, a hostile environment, and a hard ceiling on how long a single transaction can take. That combination is the signal. The hardware nouns usually quoted here — camera, barcode, signature, GPS — do not discriminate at all, because every surface on the platform can reach device capability. Hardware is how the task gets done. The task is what tells you where to build it.
+Repetition, a hostile environment, and a hard ceiling on how long a single transaction can take. That combination is the signal. The hardware nouns usually quoted here (camera, barcode, signature, GPS) do not discriminate at all, because every surface on the platform can reach device capability. Hardware is how the task gets done. The task is what tells you where to build it.
 
 <Decision kind="recommend">Canvas app.</Decision>
 
@@ -134,11 +134,11 @@ Watch for the inversion. Easy for a novice and efficient for an expert are oppos
 
 The argument people reach for first is seat price. What is worth knowing is the shape of the model rather than the rates.
 
-Power Pages authenticated access sells in [capacity packs of 100 users](https://learn.microsoft.com/en-us/power-platform/admin/powerapps-flow-licensing-faq#power-pages) — the same 100 at every tier — purchased per website and assigned to environments. Unused capacity does not carry forward; it is a monthly rate against anticipated volume, not an asset that accumulates. A metered alternative bills per unique authenticated user per website per month, counting anyone who logged in at least once, and it is [still labelled preview](https://learn.microsoft.com/en-us/power-platform/admin/pay-as-you-go-meters) in Microsoft’s own documentation. That is a different kind of commitment than a subscription, and it belongs in the decision.
+Power Pages authenticated access sells in [capacity packs of 100 users](https://learn.microsoft.com/en-us/power-platform/admin/powerapps-flow-licensing-faq#power-pages), the same 100 at every tier, purchased per website and assigned to environments. Unused capacity does not carry forward; it is a monthly rate against anticipated volume, not an asset that accumulates. A metered alternative bills per unique authenticated user per website per month, counting anyone who logged in at least once, and it is [still labelled preview](https://learn.microsoft.com/en-us/power-platform/admin/pay-as-you-go-meters) in Microsoft’s own documentation. That is a different kind of commitment than a subscription, and it belongs in the decision.
 
 Two things make this an environment and site design decision before it is a procurement one.
 
-The first is that enabling pay-as-you-go on an environment does not put the two models side by side. Prepaid Power Pages capacity assigned to that environment is ignored and not consumed — you keep owning capacity that does nothing until you reallocate it elsewhere. Being ignored is worse than being blocked, because nothing fails and nobody notices. Do not generalize the rule past the products it applies to: prepaid and metered Power Automate explicitly do coexist in one environment.
+The first is that enabling pay-as-you-go on an environment does not put the two models side by side. Prepaid Power Pages capacity assigned to that environment is ignored and not consumed: you keep owning capacity that does nothing until you reallocate it elsewhere. Being ignored is worse than being blocked, because nothing fails and nobody notices. Do not generalize the rule past the products it applies to: prepaid and metered Power Automate explicitly do coexist in one environment.
 
 The second is that capacity is consumed only by users who are not already licensed. A user holding a Power Apps per-user license or a Dynamics 365 enterprise license that grants website access is not counted against Power Pages capacity at all. So who you put on the site determines what you buy, and a site mixing licensed staff with unlicensed externals has a cost model you cannot read off a seat count. Trial and private-mode sites are not metered either, which is why development and testing are not the thing to budget for.
 
@@ -168,7 +168,7 @@ The durable argument is surface area. A portal is a second security model, a sec
 
 #### The ceiling nobody plans for
 
-A cloud flow run is [capped at 30 days](https://learn.microsoft.com/en-us/power-automate/limits-and-config#duration-limits), measured from the moment the trigger fires, and that window covers every pending step inside it. An approval still sitting unanswered in someone’s inbox on day 31 does not resume. It times out. This is not a licensing tier you can buy your way past — the published limit carries no per-plan variation. It comes from the orchestration engine underneath.
+A cloud flow run is [capped at 30 days](https://learn.microsoft.com/en-us/power-automate/limits-and-config#duration-limits), measured from the moment the trigger fires, and that window covers every pending step inside it. An approval still sitting unanswered in someone’s inbox on day 31 does not resume. It times out. This is not a licensing tier you can buy your way past; the published limit carries no per-plan variation. It comes from the orchestration engine underneath.
 
 So the design rule is this: never model a business wait as a technical wait. If the process can plausibly exceed a month, and contract negotiation, annual review, vendor onboarding, and dispute resolution all can, then the state belongs in Dataverse and the flow becomes the thing that moves it one step. One flow raises the request. A separate flow reacts to the response. What you have built is a state machine with durable state, which is what a long process needed in the first place.
 
@@ -202,12 +202,12 @@ The second is overlap, and it is the one that gets skipped in design reviews. If
 
 **Why:** one input, one output, called at a known point in a process. Not every AI requirement needs an agent, and the industry currently has that ratio badly wrong.
 
-**Avoid:** standing up an agent to perform a stateless operation. An agent exists to hold context across turns and to choose between tools at runtime. A summarize step does neither. What it inherits instead is everything the agent brings whether or not the step uses it: an orchestrator to configure, topics and triggers to maintain, a conversation model to reason about, and a second set of meters to forecast. Agent actions such as triggers and topic transitions bill on their own rate, tenant graph grounding bills on another, and a reasoning model bills on two meters at once — the feature rate for the action plus a premium rate for the reasoning itself. None of that buys a summarize step anything.
+**Avoid:** standing up an agent to perform a stateless operation. An agent exists to hold context across turns and to choose between tools at runtime. A summarize step does neither. What it inherits instead is everything the agent brings whether or not the step uses it: an orchestrator to configure, topics and triggers to maintain, a conversation model to reason about, and a second set of meters to forecast. Agent actions such as triggers and topic transitions bill on their own rate, tenant graph grounding bills on another, and a reasoning model bills on two meters at once: the feature rate for the action plus a premium rate for the reasoning itself. None of that buys a summarize step anything.
 
 <Decision kind="flips">The task requires memory across turns, or the model must choose between tools at runtime. That is agent territory, and the extra meters are then buying you something.</Decision>
 
 <Callout type="note">
-On cost, know the shape and price it yourself. The rate for the model call is published per 1,000 tokens and does not change with the caller — the same prompt costs the same invoked from a flow, an app, or an agent. What differs is which currency pays for it and which meters run alongside it, and both of those move. AI Builder credit entitlements seeded into existing licenses are being retired; confirm the current date and the current rates against [the AI Builder licensing docs](https://learn.microsoft.com/en-us/ai-builder/message-management) and the [Copilot Studio billing rates](https://learn.microsoft.com/en-us/microsoft-copilot-studio/requirements-messages-management) before a per-record AI pattern depends on either.
+On cost, know the shape and price it yourself. The rate for the model call is published per 1,000 tokens and does not change with the caller: the same prompt costs the same invoked from a flow, an app, or an agent. What differs is which currency pays for it and which meters run alongside it, and both of those move. AI Builder credit entitlements seeded into existing licenses are being retired; confirm the current date and the current rates against [the AI Builder licensing docs](https://learn.microsoft.com/en-us/ai-builder/message-management) and the [Copilot Studio billing rates](https://learn.microsoft.com/en-us/microsoft-copilot-studio/requirements-messages-management) before a per-record AI pattern depends on either.
 </Callout>
 
 ### Signal: “We call this API from six places”
@@ -263,14 +263,14 @@ Contoso Field Services runs safety inspections on distribution assets. The analy
 
 **Name what you heard.** Four signals, and they do not agree.
 
-1. “Findings against the asset, the work order, and any prior open defects” — three related tables, minimum. Relational. Points at model-driven.
-2. “No signal in the field” plus a technician standing at an asset — constrained, repetitive, offline. Points at canvas.
-3. “See all open inspections by region and reassign them” — views, filtering, ownership, assignment. Points at model-driven again.
-4. “Easy to use” — tells you nothing yet.
+1. “Findings against the asset, the work order, and any prior open defects.” Three related tables, minimum. Relational. Points at model-driven.
+2. “No signal in the field,” plus a technician standing at an asset. Constrained, repetitive, offline. Points at canvas.
+3. “See all open inspections by region and reassign them.” Views, filtering, ownership, assignment. Points at model-driven again.
+4. “Easy to use.” Tells you nothing yet.
 
 **Resolve the conflict.** Signals 1 and 3 agree with each other. Signal 2 disagrees with both. Rule 2 applies: signals identify the component that owns the center of gravity, and here there are two populations doing different work over one data model. That is not a tie to break. It is two experiences to build.
 
-Signal 4 resolves with the follow-up question. Easy for whom, how often? The answer comes back: inspectors run fifteen to twenty inspections a shift, every shift. That is an expert, not a novice — density and tap count, no wizard. Had the answer been “twice a year, never trained,” the same phrase would have pointed somewhere quite different.
+Signal 4 resolves with the follow-up question. Easy for whom, how often? The answer comes back: inspectors run fifteen to twenty inspections a shift, every shift. That is an expert, not a novice: density and tap count, no wizard. Had the answer been “twice a year, never trained,” the same phrase would have pointed somewhere quite different.
 
 **The decision.** Dataverse owns the system of record: asset, work order, inspection, defect. A canvas app serves inspectors, offline-first, with the offline data model settled before the first screen is drawn. A model-driven app serves supervisors over the identical tables, using platform views, assignment, and role-based security rather than built ones. Load-bearing component: Dataverse. The apps are two experiences over it.
 
@@ -287,9 +287,9 @@ Signals:      Relational depth (3+ tables) + supervisor views and
 Chosen:       Dataverse as system of record; canvas app for
               inspectors; model-driven app for supervisors
 Flips it:     Inspectors stop needing defect history at the asset,
-              collapsing capture to a single flat form — then the
+              collapsing capture to a single flat form. Then the
               canvas app stands alone and Dataverse is arguable
-Deferred:     Offline conflict resolution strategy — blocks the
+Deferred:     Offline conflict resolution strategy. Blocks the
               canvas build, not the model decision
 ```
 
@@ -307,7 +307,7 @@ That record is the artifact a design review needs. The recommendation is the che
 
 Both trees assume the data model question is already settled. If it is not, stop and settle it. Every branch above is cheap to change later. The data model is not.
 
-That is the case for working schema-first: settle the question in the model, once, and let every surface inherit the answer instead of restating it. The data model is the first design decision, not the last implementation detail — and the cost of getting that backwards is not a slower build. It is the same decision re-made at every point of use, in as many places as there are surfaces.
+That is the case for working schema-first: settle the question in the model, once, then configure surfaces against it instead of re-deciding at each one. The data model is the first design decision, not the last implementation detail, and the cost of getting that backwards is not a slower build. It is the same decision re-made at every point of use, in as many places as there are surfaces.
 
 ## The decision checklist
 
