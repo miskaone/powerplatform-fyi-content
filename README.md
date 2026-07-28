@@ -23,8 +23,9 @@ content/labs/        hands-on walkthroughs
 standards/           the editorial standard the writing is held to
 ```
 
-Some entries are short placeholders standing in for pieces not yet written. They
-say so in their own text.
+This mirrors what is published. Drafts and unfinished pieces are not here, so a
+directory is absent until something in it ships — patterns and labs are both
+still to come.
 
 ## Frontmatter
 
