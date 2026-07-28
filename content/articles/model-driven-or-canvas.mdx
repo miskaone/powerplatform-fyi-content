@@ -1,0 +1,306 @@
+---
+title: "Model-Driven or Canvas: What You Just Signed Up For"
+description: "The selection question has an answer. This is the one underneath it: what model-driven generates and therefore constrains, and the three jobs canvas leaves with you in exchange for control."
+date: "2026-07-27"
+category: "Architecture"
+tags:
+  - Power Platform
+  - Architecture Signals
+  - Solution Design
+  - ALM
+  - Dataverse
+featured: false
+status: "published"
+---
+
+The first canvas app is always the fastest thing anyone has ever built. That is not an illusion, and it is not a trap. It is an accurate preview of exactly one phase of the work.
+
+Choosing between model-driven and canvas is the most common decision on the platform, and it gets made with the least information, usually in the first twenty minutes of a discovery call, on the strength of a demo. The previous entry in Architecture Signals, [Choosing the Right Power Platform Component](/articles/choosing-the-right-power-platform-component), argued the selection question: which component owns the center of gravity, and what would flip it. This one sits a layer below.
+
+Assume you made the call correctly. What did you just agree to?
+
+## Generated, and therefore constrained
+
+Model-driven apps are not assembled. They are generated from a data model, and everything good and everything frustrating about them descends from that one fact.
+
+Microsoft says it plainly:
+
+> Although we call them *model-driven apps*, it's often easier to think of them as data model driven apps. This is because, without a data model housed within Microsoft Dataverse, you can't create a model-driven app.
+
+And on what that costs you:
+
+> Unlike canvas app development where the designer has complete control over app layout, with model-driven apps much of the user interface is determined for you and is largely designated by the components you add to the app.
+
+Read those two sentences together and the trade is fully stated. You give up layout control. In return, forms, views, related grids, relationship navigation, and device adaptation are generated from the model rather than assembled by hand.
+
+Generated is not the same as free, and that distinction runs through the rest of this article. You define the data structure once, then configure generated surfaces against it, rather than constructing and maintaining each experience independently. That is specification work, and it lands at the front of the project rather than spread across it.
+
+What gets underweighted is that this is not only a build-time posture. It is a *maintenance* one. Add a column to a table and the surfaces that should show it are a known, enumerable set you configure, not a codebase you search. A hand-built surface has no such property: every schema change is a change to screens, and someone has to find all of them, correctly, every time.
+
+Canvas inverts all of it. You control the screen order, the tap count, the pixel. Nothing is generated, so nothing is generated *for you later either*.
+
+The whole trade fits in one table. [Microsoft publishes a version of this comparison](https://learn.microsoft.com/en-us/power-apps/maker/model-driven-apps/model-driven-app-overview); this one restates it in the terms this series uses, and adds the first and last rows, which are the ones that actually decide the argument.
+
+| Category | Model-driven apps | Canvas apps |
+|---|---|---|
+| **Starting point** | The data model and the business process. | The user experience and the task flow. |
+| Data platform | Dataverse only. The application is generated from Dataverse schema and metadata. | Dataverse plus the connector catalogue: SharePoint, SQL Server, Salesforce, SAP, and anything reachable through a custom connector. |
+| User experience | Opinionated and metadata-driven. Forms, views, dashboards, business process flows, and commands are configured rather than drawn. | Pixel-level control. Every screen, layout, and interaction is designed explicitly by the maker. |
+| Application lifecycle | **Composes.** Model-driven app, form, and site map are the only component types that merge, so a downstream solution extends rather than replaces. | **Collides.** A canvas app is "top wins," so a downstream solution substitutes for it rather than extending it. |
+| Responsive design | Provided by the platform across supported devices. | Built deliberately, with containers, layout formulas, and testing. |
+| Accessibility | Baseline built into the platform's generated surfaces. | Whatever the maker builds: controls, labelling, contrast, keyboard order. |
+| **Best suited for** | Related data, security roles, auditing, and standardized processes that have to stay consistent. | Focused task experiences, mobile and offline work, and interfaces that must follow a prescribed flow. |
+
+The lifecycle row is the one that pays off later, so it is worth saying what sits under it operationally. On the model-driven side, [solutions track component dependencies](https://learn.microsoft.com/en-us/power-platform/alm/dependency-tracking-solution-components). Deletion is blocked while something depends on a component, export warns on missing ones, and import fails outright if a required component is absent from both the solution and the target. That is governed deployment as a unit. It is not automatic propagation: nothing updates every dependent form, view, or flow for you. On the canvas side, connectors, connection references, and environment variables each have to be managed per environment, and a custom connector needs a hand-edit in the target environment before its binding works at all.
+
+Note what the user experience row is *not* called. Microsoft's version of it reads "Limited, predominantly customization," and read quickly that lands as a capability gap. It isn't one. A metadata-driven interface is an opinionated framework, and the opinions are the product. They are what makes the surface consistent, governable, and cheap to change from one place. Calling that *limited* frames a deliberate trade as a deficiency, and an architect who accepts that framing will keep reaching for canvas to solve problems that were never about layout.
+
+Read the first row and the last row together and everything between them is downstream of the choice they describe.
+
+<Decision kind="recommend">Say the trade out loud in the design review: model-driven trades layout control for absorption of change; canvas trades absorption of change for layout control. Both are legitimate choices. Neither is free, and the work canvas defers shows up later in the schedule than the work model-driven demands up front.</Decision>
+
+To be precise about what follows, because the word *cost* does too much work in Power Platform conversations: the next three sections are **engineering cost**, meaning jobs the platform stops doing, which someone on your team now does by hand and maintains forever. Not licence fees, not capacity, not consumption meters. Money enters exactly once, in [the section after them](#the-licensing-question-which-is-the-actual-money-one), and when it does it argues the opposite of what people expect.
+
+Three jobs, and the schedule slot where each one surfaces.
+
+## Job one: you own the query plan
+
+This is the spine, and it is the only one of the three that surfaces in production rather than in the schedule.
+
+A canvas app does not run your query. It negotiates it. When you write a formula against a data source, the platform decides whether the work can be pushed to the server (*delegated*) or whether it has to pull rows to the client and do the work locally. Local work is capped. By default the cap is **500 records**, and the maximum you can raise it to is **2,000**.
+
+Under the cap, everything behaves. Over it, the app does not fail. It answers from the first 500 rows and presents the result with total confidence.
+
+Three properties make this worse than a normal limit.
+
+**It is all-or-nothing.** From Microsoft's own documentation: *"if any part of a query expression is nondelegable, Power Apps doesn't delegate any part of the query."* One unsupported function anywhere in the expression collapses the entire thing to local evaluation. Not the unsupported clause. The whole query.
+
+**It is a warning, not an error.** The app saves. The app publishes. The app passes UAT against a table with 300 rows in it and goes to production against a table that will have 40,000 by March.
+
+**The most dangerous case produces no warning at all.** Collections built with `With`, `Set`, or `UpdateContext` cannot delegate, and the editor does not flag them. The blue underline you have been trusting as a safety net is not covering the pattern most likely to bite you. Warnings only appear against delegable data sources in the first place, so a non-delegable source produces silence that reads exactly like approval.
+
+<Callout type="warning">
+While you build, set **Settings → General → Data row limit** to **1**. It is a per-app setting, not an environment one, so it travels with the app and has to be put back before release. Every non-delegable operation then returns a single record, which is impossible to miss and impossible to argue with. Microsoft recommends exactly this: *"Anything that can't be delegated returns a single record, which is easy to detect when testing your app."* Almost nobody does it. Check current behaviour and function support against [the delegation overview](https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/delegation-overview); the supported-function list moves.
+</Callout>
+
+Model-driven does not spare you this work. It relocates it, earlier and into the data model.
+
+Views, filtering, and search execute server-side against Dataverse as a matter of architecture rather than as a matter of you having written each formula carefully. But the thinking that makes those queries correct and fast does not disappear; it moves into schema: relationships, column types, choice sets versus lookups, what is indexed, what a view actually selects. That work is harder than writing a `Filter()` and it matters more, which is where [Microsoft says the time goes](https://learn.microsoft.com/en-us/power-apps/maker/model-driven-apps/model-driven-app-overview): *"A large part of the time spent building the app is dedicated to modeling the business data."*
+
+So the difference is not effort saved. It is **how many independent places the answer can be wrong, and when you find out.**
+
+Model-driven makes the data model the first design decision rather than the last implementation detail. Ask the question once. Encode the answer. Every form, view, dashboard, and process inherits it.
+
+Canvas re-poses the same question at every formula on every screen, and answers it in a language that stays quiet when the answer is wrong. Twenty-five screens is twenty-five chances to get *this* wrong separately. The schema is one place to get it right.
+
+That claim is easy to oversell, so hold it to its actual size. Model-driven is not self-correcting in general. Forms, views, dashboards, commands, and security roles are all still configured by hand, and all still independently wrong. What the data model removes is the need to re-answer *this particular* question, the one about how data gets fetched, once per screen for the life of the app.
+
+<Decision kind="flips">The data volume is bounded by something real and permanent, not by optimism. A reference table of 40 branch codes will never delegate-fail because it will never exceed the cap. The question is not "how many rows are there," it is "who is allowed to add rows, and what stops them." If the answer is nobody and nothing, treat it as unbounded.</Decision>
+
+## Job two: you own every downstream copy
+
+This one surfaces at the second deployment, never the first. Here is the finding that reorders the whole comparison, and it is one line in the documentation:
+
+> Notice that only model-driven app, form, and site map component types are merged. All other components use "top level wins" behavior.
+
+Source: [Solution layers and merge behavior](https://learn.microsoft.com/en-us/power-platform/alm/solution-layers-alm)
+
+Read the merge list again. Model-driven app. Form. Site map. That is the complete set of component types the platform will merge when two solutions touch the same thing, and all three of them are model-driven furniture.
+
+A canvas app is in the "all other components" bucket. Top layer wins, wholesale.
+
+This is not "canvas ALM is fiddlier." It is a categorical difference in what a solution import *means*. When two managed solutions both carry a model-driven form, the platform attempts to reconcile them. When two solutions both carry a canvas app, the top one replaces the other outright.
+
+Do not read *merge* as *conflict-free*, though. Microsoft is careful about this on the same page, and so should you be:
+
+> Although every effort is made to preserve the presentation, some incompatibilities between customizations might require that the computed resolution change some presentation details in favor of maintaining the customization functionality.
+
+So merging supports downstream composition; it does not guarantee that the result looks like either input. That is still categorically better than substitution: a reconciled form can preserve compatible changes from both layers, while a replaced canvas app resolves to whatever the top layer holds.
+
+The practical consequence: **a canvas app cannot be safely customized through an assumed merge model.** Any layer above yours does not adjust your app, it substitutes for it. If your deployment model assumes a base solution plus per-customer extension solutions (the standard ISV shape, and increasingly the standard internal-platform-team shape), model-driven components compose and canvas components collide.
+
+### The workaround that costs you the thing you were protecting
+
+The connection-reference behaviour deserves its own paragraph, because Microsoft's documented fix for it undoes managed solutions.
+
+Canvas apps and flows do not handle connections the same way. Flows use connection references for every connector. Canvas apps use them *only* for implicitly shared, non-OAuth connections. And for custom connectors:
+
+> Canvas apps don't recognize connection references on custom connectors. To work around this limitation, after a solution is imported to an environment the app must be edited to remove and then readd the custom connector connection. Note, if this app is in a managed solution, proceeding to edit the app will create an unmanaged layer.
+
+Source: [Use a connection reference in a solution](https://learn.microsoft.com/en-us/power-apps/maker/data-platform/create-connection-reference)
+
+Note what that fix is and is not. What Microsoft documents is a manual edit in the target environment, during import, when the custom-connector binding has to be established, and no automation interface for performing it. Treat it as a runbook step somebody executes and verifies rather than something you can script away and forget. Whether a later upgrade re-breaks the binding is not stated on that page; if it does so in your tenant, record that as observed behaviour in the runbook rather than as documented guarantee.
+
+The prescribed remediation requires editing an app inside a managed solution in a downstream environment, which by the platform's own rules creates an unmanaged layer on top of it. You now have exactly the thing managed solutions exist to prevent, created deliberately, on Microsoft's instructions, in production.
+
+I have never seen that trade discussed in a design review before the deployment that discovers it. It is discoverable months ahead, it is written down, and it is a genuine input to the model-driven-versus-canvas decision when custom connectors are in scope.
+
+Two more edges worth carrying into the review:
+
+- **Connection references attach to a canvas app only when a data source is added.** Apps built before you adopted the pattern are not upgraded by importing them. Upgrading means removing the connection and re-adding it. Apps and flows brought in from outside solutions are never upgraded automatically. ([source](https://learn.microsoft.com/en-us/power-apps/maker/data-platform/create-connection-reference))
+- **Sharing does not travel the way people assume.** A canvas app shared with *Everyone* loses that sharing through an environment backup and restore. Sharing with a security group survives; sharing with Everyone does not. And when an app in a solution is shared with users, *"the flows must also be explicitly shared."* The app working for you proves nothing about the app working for them. ([source](https://learn.microsoft.com/en-us/power-apps/maker/data-platform/solutions-overview#known-limitations))
+
+### Start in a solution, for the reason that is currently true
+
+The rule most architects carry here is out of date, and the documentation has not caught up with itself. [One page](https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/add-app-solution#add-an-existing-canvas-app-to-a-solution) still states that an app can only be added to a solution if it was created inside one. [A newer one](https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/add-app-solution-default) describes moving non-solution apps in:
+
+> Non-solution canvas apps and non-solution cloud flows can be added into a solution to add them into Dataverse, but there's no way to revert back.
+
+Source: [Add canvas apps and cloud flows to a solution by default](https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/add-app-solution-default)
+
+Retrofitting is possible. It is the *"no way to revert back"* that should decide your standard, not an origin rule that no longer holds. Two further constraints are worth carrying into a governance conversation:
+
+- The setting that creates canvas apps in solutions by default was **still preview** as of that page's November 2025 revision, while the cloud flows half went generally available in October 2024. Confirm its current status before a platform standard leans on it.
+- Not every entry point participates. Apps created from a template, or by customizing a SharePoint form, are listed as unsupported for solution-by-default.
+
+<Callout type="note">
+When two Microsoft Learn pages disagree, check `ms.date` before believing either. The page carrying the older rule reads `ms.date: 2021-10-21` against `updated_at: 2026-01-16`, meaning it was touched this year without its content being re-reviewed. A recent-looking page is not a reviewed page, and this is the most common way a stale platform rule survives in circulation.
+</Callout>
+
+So "start in a solution" remains the right standard, and it is still a decision made before the first screen exists, but as a one-way door rather than a locked one.
+
+<Decision kind="flips">Nothing downstream will ever extend the app. A single-tenant, single-environment app with one owning team never meets the merge behaviour, because nothing is ever layered on top of it. The moment a second solution, a second customer, or a platform team enters the picture, it applies.</Decision>
+
+## Job three: you own responsive and accessible
+
+Two rows of that table are where an estimate quietly changes, and Microsoft's own wording on them is blunter than most third-party comparisons. Canvas apps are *"Only responsive if designed in this way."* Accessibility is *"Designed into the app."*
+
+Those are the same sentence twice, and both mean: this is now a line item.
+
+Accessibility is the one that turns into a problem rather than a task. It is rarely in the functional spec, it is frequently in the procurement requirements, and it surfaces late, typically when someone outside the delivery team asks a question nobody on the team was scoped to answer. On a model-driven app the honest answer is that the platform handles the baseline. On a canvas app the honest answer is whatever you actually built, and "we used the default controls" is not an accessibility strategy.
+
+Screen count is the visible proxy for all of this. The previous entry put the flip at **15 to 20 screens**, or CRUD spanning **more than three or four related tables**, and named twenty-five screens as the smell that means the model-driven decision never got made. The reason those numbers work as a tripwire is not that screens are expensive individually. It is that each screen is a place where responsiveness, accessibility, navigation, and permission logic have to be re-implemented by hand and kept consistent with the other twenty-four.
+
+<AntiPattern
+  label="Screen"
+  count={5}
+  description="Five canvas screens stacked, each one re-implementing navigation, responsiveness, and accessibility by hand."
+  caption="Every screen re-implements navigation, responsiveness, and accessibility by hand, and each one is a place for the twenty-fifth to disagree with the first."
+/>
+
+<Decision kind="flips">The app is genuinely one task on one or two screens for one population. Constrained scope is exactly what canvas is for, and a four-screen canvas app barely picks this job up at all. This is a curve, not a threshold. The effort bends upward around the same place the relationship complexity does.</Decision>
+
+## The licensing question, which is the actual money one
+
+Everything above is work. This is spend, and it is the one place in this article where *cost* means an invoice. It gets its own section rather than a fourth slot in the list because it does not behave like the other three at all: the first three are jobs canvas leaves with you, and this one, read honestly, runs mildly in canvas's favour.
+
+Two claims circulate here and one of them is wrong.
+
+The wrong one is that per-app licensing differs by app type. It does not. A per-app pass buys a user **one app, canvas or model-driven, in one environment**, and the mechanics are identical either way. Since October 2021 one pass is one app or one portal; subscriptions purchased before 1 October 2021 keep three passes for their agreement term. Passes are allocated to *environments*, not assigned to users, and get consumed when an app is shared. They do not appear on the Microsoft 365 admin centre licences page at all, which is why the first conversation about them is usually a confused one. All of that is [documented per-app mechanics](https://learn.microsoft.com/en-us/power-platform/admin/about-powerapps-perapp), and none of it varies by app type.
+
+The real asymmetry is on the build side, and it runs opposite to the direction people expect:
+
+> You don't need a license to build canvas apps. You need a license to build model-driven apps.
+
+Note the precise size of that claim: it establishes a lower **maker-licensing barrier** on day one, not a cheaper project. Developer environments, entitlements you already hold, staffing, premium connectors, and whether you need Dataverse anyway can all erase the difference before anyone writes a formula. What survives is the shape of the trap. The barrier you cleared cheaply on day one is dwarfed by the three jobs above, which is the whole argument of this article compressed into one line.
+
+<Callout type="note">
+Know the shape, price it yourself. Two facts worth carrying into the cost conversation and drawing your own line between: Microsoft lists *Dataverse entities* among the features that require premium entitlements, and a model-driven app cannot exist without Dataverse. Work out what that implies for your landscape against [current licensing documentation](https://learn.microsoft.com/en-us/power-platform/admin/powerapps-licensing-faq) and the licensing guide rather than trusting the implication as stated by anyone, including this article. Rates and entitlements are revised on a cadence no article survives.
+</Callout>
+
+One runtime rule does depend on app type, and it inverts the usual embedding advice. A licence with *limited use rights* for Power Apps can play canvas apps with premium capabilities only when they are embedded inside a model-driven app, through the supported custom-page method. Not standalone in a browser, and not in the mobile player. If your plan is "canvas app, launched directly, users covered by their existing Dynamics licence," confirm that before it becomes the architecture.
+
+## The smells, updated
+
+The previous entry's smell table named the symptom. These name the job that nobody picked up.
+
+| Smell | Job that went undone |
+|---|---|
+| Gallery shows the right data in test, wrong data in production | Delegation. Test data was under the cap. |
+| `Filter()` wrapped around a `Set()` collection | Delegation, with no warning shown. The invisible case. |
+| Downstream solution "customizes" a canvas app | Merge. Top wins; it replaced it |
+| An unmanaged layer in production nobody created on purpose | The custom-connector connection-reference workaround |
+| App works for the maker, fails for every user | Flows were never shared alongside the app |
+| Sharing vanished after an environment restore | Shared with Everyone instead of a security group |
+| Accessibility raised for the first time in UAT | Built-in versus designed-in, discovered late |
+| Twenty-five screens | The model-driven decision was deferred, not made |
+
+The last row is carried over deliberately. It is the same smell as before, read from the other end: part one called it evidence that a decision never happened, and this piece can now say which jobs that non-decision quietly assigned to the delivery team.
+
+## A worked example
+
+Same composite shape as before, one layer deeper. The decision has already been made correctly. This is the review that happens after.
+
+A platform team ships an inspection app to fourteen operating companies. Base solution, per-company extension solutions, managed all the way down. The inspector experience is canvas, because the field signals were unambiguous: repetitive, offline, gloves, thirty seconds at the door. Supervisors get model-driven over the same Dataverse tables. By the reasoning in part one, that is correct, and nothing here reverses it.
+
+All three jobs land anyway, and none of them are on the plan.
+
+**Company four wants two extra fields on the inspector capture screen.** Their extension solution carries a modified canvas app. On import it does not merge. It replaces. Company four now runs a fork that will drift from the base app on every subsequent release, and nobody notices until the base app ships a fix that company four does not receive. The model-driven supervisor app in the same solution *does* merge, which is why the problem looks intermittent and product-specific rather than structural.
+
+**The capture screen filters open defects by asset.** Fine at 300 test records. The largest operating company crosses 500 in month five, and matching defects outside the retrieved window stop appearing in the gallery at all, so inspectors re-raise defects that were already open against the same asset. No error is raised at any point.
+
+**A custom connector reaches the legacy asset registry.** Standing the app up in each target environment needs the connection removed and re-added by hand, and doing so creates an unmanaged layer on a managed app in fourteen production environments.
+
+**The decision record.**
+
+```
+Requirement:  Inspection capture, offline, 14 operating companies,
+              base + per-company extension solutions
+Chosen:       Canvas for inspectors (field signals), model-driven
+              for supervisors, Dataverse as system of record
+Still true:   The selection call. Field signals are unambiguous and
+              the generated model-driven surface does not serve
+              that task experience; a custom page would only be
+              canvas with a longer commute
+Jobs owned:   Delegation ceiling on the defect gallery (500 default,
+              2,000 max). Dev row limit set to 1, filter pushed
+              server-side, verified against the largest company's
+              volume, not the test set
+              Canvas does not merge, so per-company customization
+              of the canvas app is prohibited by policy, not by
+              taste; extension points are Dataverse config, not
+              app edits
+              Custom connector requires post-import hand-editing.
+              Connector isolated to its own solution, remediation
+              runbooked and manually verified per environment,
+              treated as expected work rather than as incident
+Flips it:     Company count drops to one, or per-company divergence
+              becomes genuine product variation. Then forks are
+              the honest model and the base app stops pretending
+Deferred:     Whether supervisors' custom pages inherit the canvas
+              merge behaviour. Blocks the extension model, not
+              this release
+```
+
+The recommendation was never the hard part. The three jobs are, and every one of them is knowable before the first screen exists.
+
+## What model-driven asks up front
+
+A comparison that only examines one option is an argument wearing a comparison's clothes, and everything above examines canvas. So here is the other side.
+
+Model-driven's costs are real. They are paid earlier, which is why they land in an estimate instead of in an incident, and why a piece about deferred work spends less time on them.
+
+**It requires Dataverse.** The licensing section above gives you both facts you need to price that for your own landscape; the point here is that the requirement is structural rather than optional. Choosing model-driven is choosing Dataverse for the life of that application.
+
+**It requires a licence to build, where canvas does not.** The build-side asymmetry runs against model-driven, on day one, at the moment a team is deciding whether to try anything at all.
+
+**The generated surface has a ceiling, and the way past it hands you this article back.** The ceiling is real: a generated surface will not become a four-tap capture screen by configuration. But it is not a wall, and saying so would be wrong. A [custom page](https://learn.microsoft.com/en-us/power-apps/maker/model-driven-apps/design-page-for-model-app) *"lets you create a page that's similar to a canvas app in your model-driven app"*: layout containers, Power Fx, galleries, canvas and code components, inside the model-driven shell.
+
+That escape hatch has a price, and the price is the sections above. Responsive layout goes back to being something you build by hand out of container hierarchies. You get a documented *"subset of canvas app controls"*, and Microsoft still labels the feature as carrying *"a number of known limitations."* One thing genuinely improves rather than regressing: tab navigation is inherited from the host app, so *"unlike stand-alone canvas apps"* you are not assigning tab order yourself. Job three comes back partially, not wholly.
+
+<Callout type="note">
+Offline is not the discriminator, and treating it as one is a common way this decision gets made wrong. Model-driven apps [run offline-first on mobile](https://learn.microsoft.com/en-us/power-apps/mobile/work-in-offline-mode) once an offline profile defines which Dataverse tables sync to the device. What pushes the inspector in part one toward canvas is the shape of the task (repetition, gloves, a hard ceiling on seconds per transaction), not the absence of a network.
+</Callout>
+
+<Decision kind="flips">Every cost above is front-loaded and estimable, which is what makes it survivable. Reach for canvas when the experience itself is the requirement and a custom page would only be a canvas app with a longer commute: a prescribed sequence, a tightly constrained capture task, a population that will never open a second screen. Reach for model-driven when these costs are merely expensive, because expensive-and-known beats cheap-and-discovered-in-month-five.</Decision>
+
+## The checklist
+
+Run this the moment a canvas app is proposed for anything that will outlive the quarter.
+
+1. **What is the largest table this app filters, and who can add rows to it?** If the answer to the second half is "users, indefinitely," you have a delegation exposure regardless of today's row count. Set the dev row limit to 1 and find out now.
+2. **Is any part of the query built from a collection?** `With`, `Set`, and `UpdateContext` do not delegate and do not warn. The absence of a warning is not evidence.
+3. **Will anything ever be layered on top of this app?** A second solution, a second customer, a platform team. If yes, canvas does not merge and your extension model has to route around it.
+4. **Does it touch a custom connector?** Then plan the post-import remediation and its unmanaged layer as expected work, in the runbook, rather than discovering it during a go-live.
+5. **Who is going to ask about accessibility, and when?** If the answer is procurement, six weeks before launch, that is a line item now.
+6. **Which of these is actually a reason to move to model-driven?** Usually none of them individually. Frequently three of them together.
+
+The last question is the one that matters. None of this argues that canvas is the wrong answer. It argues that the right answer comes with work attached, that the work is real engineering effort rather than a line on an invoice, and that an architect who names it on day one is doing something categorically different from one who discovers it on day ninety.
+
+Name the work. Staff it. Then decide.
+
+## Coming next
+
+Architecture Signals takes one decision at a time and goes deep. Next up:
+
+- Dataverse versus SharePoint lists, the same question one layer down, where the answer decides whether a data model exists at all
