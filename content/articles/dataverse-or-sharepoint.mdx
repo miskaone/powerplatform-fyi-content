@@ -1,0 +1,291 @@
+---
+title: "Dataverse or SharePoint: Is There a Data Model Here?"
+description: "Not a product comparison. A category question: does the requirement need relational integrity, roles and audit, or a place for a team to keep a list?"
+date: "2026-07-29"
+category: "Architecture"
+tags:
+  - Power Platform
+  - Architecture Signals
+  - Solution Design
+  - Dataverse
+  - Governance
+featured: false
+status: "published"
+---
+
+A SharePoint site already exists. That settles the data store before anyone has written a requirement down.
+
+It is not laziness and it is not usually wrong. It is an inventory answering an architecture question, and it goes unnoticed because the two answers agree often enough to look like a method.
+
+Underneath the question of which component to build, and underneath what that choice costs, sits a prior question, and it is the one the inventory cannot answer.
+
+**Is there a data model here, or just somewhere things get put?**
+
+That is a category question, not a rhetorical one, and answering it dissolves most of the heat in the debate. Framed this way it stops being a product comparison at all. A SharePoint list is not a worse Dataverse. It is a different kind of thing, closer kin to a shared spreadsheet with a UI and a permission system than to a database. So the decision is not which store is better. It is whether the requirement in front of you needs relational integrity, role-based security and provable history, or whether it needs somewhere for a team to keep a list.
+
+Both are real requirements. Both deserve to be built properly. The expensive failures happen when one gets built as the other.
+
+## The category error
+
+A SharePoint list is a table-shaped collaboration artifact. Rows and columns, views, forms, versioning, permissions, all of it living inside a site whose entire purpose is to let a group of people work on shared material. Everything about it is designed so that a team can operate it without anyone who thinks of themselves as a developer.
+
+A Dataverse table is a row in a relational database that happens to have unusually good tooling around it. It participates in enforced relationships, a privilege-based security model, platform-level auditing, solution packaging and an API surface. It is designed so that an organization can state what its data *is*, its types, its relationships, its ownership, and have the platform refuse to let that statement be violated.
+
+Neither description contains the word "better", and that is deliberate. A list can hold thirty million items. A Dataverse table can be an over-engineered graveyard for a spreadsheet three people used twice. The category is not about scale and it is not about sophistication. It is about what the platform promises regarding the data.
+
+A list promises: *these items will be kept, versioned, and shown to the people the site says can see them.*
+
+A table promises: *these records will stay structurally consistent with each other, be shown only to people whose role entitles them, and carry a platform-level record of what happened to them.*
+
+If the requirement is the first promise, SharePoint is not the cheap option. It is the correct one. If the requirement is the second, no quantity of indexed columns and carefully written Power Fx will turn a list into it.
+
+## What each platform can enforce
+
+Being precise here matters, because "SharePoint has no relationships" is itself one of the stalest claims in this space.
+
+SharePoint lists have lookup columns, and a lookup column can enforce deletion behaviour. Put a Projects list and a Tasks list in the same site, give Tasks a single-value lookup to Projects, and SharePoint will either refuse to delete a project that tasks still reference (restrict delete) or delete the tasks along with it (cascade delete). That is real referential behaviour, and for a parent list and its children it works. Know its edges, because they are close: it operates between two lists in the same site, on single-value lookups, and it governs deletion. It does not reach across sites, and a multi-value lookup gets none of it.
+
+Past deletion, the boundaries arrive quickly.
+
+**Validation stops at the item.** Column validation is shallow, and list validation goes one step further than most people credit: it can compare columns within the item being saved, so "Due date must be after Start date" is a rule a list can enforce, though not one that can lean on lookup columns. The boundary is the current item. SharePoint can validate the item being saved. It cannot say that this row must agree with those rows in another list and reject the write when it does not. Dataverse does not give you that invariant for free, but it gives you one transactional, server-side boundary where you can enforce it for every writer.
+
+**A batch is not a transaction.** SharePoint can send three writes in one batch. It cannot make them one transaction. If the third fails, the first two stay written. Any rollback is compensation logic somebody wrote and now owns.
+
+**A relationship the platform recognizes.** A junction list can hold two lookups, require both, and restrict or cascade deletion. What it cannot say is what the pair means. Nothing native prevents the same project-person pair appearing twice, or makes every writer treat those items as one relationship rather than as ordinary list rows.
+
+Dataverse has two answers. A native many-to-many creates an intersect table the platform owns. The relationship is metadata, and apps relate and unrelate records through it. If the relationship carries data of its own (a role, a start date, an allocation), make it a table instead: two required lookups and a composite alternate key make the pair unique at the store.
+
+Dataverse still does not invent the rule. "One active assignment during a date range" needs server-side logic. The difference is that there is one place to write it, inside the boundary every writer crosses.
+
+SharePoint can hold the junction rows. Dataverse can know what they are.
+
+Now give that junction six write paths: one canvas app, three flows, a nightly integration, and direct grid editing. The rule is simple: one membership per person per project. In SharePoint, all six write paths have to check it. Miss the check once and the duplicate is not an error. It is another valid-looking list item. The number of write paths only goes up. A rule enforced by convention gets weaker every time it does.
+
+Dataverse's contribution here splits into three different things, and the brochure sentence blurs them. Configured constraints are enforced by the store with no code involved: required columns, relationships with restrict and cascade behaviour, alternate keys that turn a duplicate pair into a rejected write. Business rules cover simple table-scoped logic (set this, require that, reject the save with a message) and can run server-side when scoped to the table rather than to a form. An invariant that spans rows or tables is still code someone writes, as a synchronous plug-in or other logic inside the transaction. What the platform supplies is not the rule; it is the one place the rule can live. Written there, it holds even when the writer is careless, new, or hostile.
+
+There is a name for the discipline that answers this. **Schema-first**: settle a question in the data model before any surface expresses it, so the structure is defined once and every app, flow and integration configures against the answer instead of re-deciding it. The alternative is never a later decision. It is the same decision re-made at every point of use, and so the test is not how much work a choice saves but how many independent places its answer can be wrong, and when that surfaces. A store that cannot enforce the answer cannot be schema-first about anything, and that is what the category question is really asking.
+
+<Decision kind="flips">There is exactly one write path and there always will be. One app, no integrations, no direct grid editing, no flows written by anyone else. Enforcement in that single writer is then enforcement everywhere, and the distinction collapses. Test the word "always" the way part two tested a row count: ask who is allowed to add a write path, and what stops them. If the answer is nobody and nothing, treat it as unbounded.</Decision>
+
+## Scale and query correctness
+
+### The five thousand, properly understood
+
+Now the single most-repeated claim in this space, and the one most often stated stale: *SharePoint lists stop working at 5,000 items.*
+
+Here is what the documentation actually says. A SharePoint list or library can store up to **30 million items**. The 5,000 figure is the [List View Threshold](https://support.microsoft.com/en-us/sharepoint/lists/data-and-lists/list-view-threshold-for-large-lists-and-libraries): the maximum number of items a single database operation may process at one time. It exists because SharePoint's back end is SQL Server, and SQL Server escalates from row-level locking to a full table lock when one operation touches too many rows, so the threshold protects a shared multi-tenant service from any single customer's expensive query. In SharePoint Online the value is fixed and cannot be raised. Lists start warning on the settings page at 3,000.
+
+Three things are true at once, and an honest article has to hold all three.
+
+**"Lists cap at 5,000 items" is false.** It was always a misreading of a query limit as a storage limit. Storage is not the constraint, and the modern list experience handles large, well-indexed lists in day-to-day browsing far better than the folklore suggests.
+
+**The threshold is real, and being a query constraint rather than a storage one makes it more subtle, not less.** What breaks past 5,000 is never "the list". It is specific operations: a view whose filter cannot use an index, a flow action without pagination, an app query the platform cannot push down. The documented remedies work. Index the columns you filter on, design views that return under the threshold, filter on indexed columns first. But they are *design obligations*, and they arrive without an announcement. Nobody emails you when a list crosses 5,000. The first symptom is a view or a flow failing in production.
+
+**Its modern failure mode is silence, not an error page.** In a canvas app, a query the platform cannot delegate does not fail. It returns the first 500 records, configurable up to 2,000, and processes those locally. If the record someone wanted is number 2,001, the app simply does not find it, and a blue squiggle in the editor is the only warning anyone ever gets.
+
+I watched this happen to a proof of concept imported from a spreadsheet: about five hundred rows, which is not a small dataset so much as a perfectly deceptive one, because five hundred is the default delegation limit. Every query the platform could not push down still returned complete results, row for row, through the whole demo. The solution cleared review, met forty thousand rows in QA, and stopped working as intended with no error anywhere. The rebuild landed on Dataverse, and the second build cost more than the first.
+
+That failure mode is a correctness problem wearing a performance problem's clothes, and it is the bridge from part two into this article. The cost of the SharePoint choice is not that lists are slow. It is that the burden of correctness moves out of the platform and into your formulas.
+
+Dataverse has no List View Threshold to hit, because its query layer is the thing SharePoint's threshold exists to protect. It has ceilings of its own: queries page in blocks of up to five thousand rows, service-protection limits meter how hard a client may hit the API, and the aggregate functions cap at fifty thousand rows, as the delegation tables below itemize. The difference is the failure shape. Dataverse's limits page, throttle, or refuse the request and say so. The threshold's modern failure mode, as above, is a right-looking wrong answer.
+
+### The query surface, compared honestly
+
+Part two priced the choice. The delegation tables are where the price gets itemized, so here they are side by side, taken from Microsoft's connector documentation rather than from anyone's blog folklore, this article's included. Check the links.
+
+[**SharePoint delegates**](https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/connections/connection-sharepoint-online), by data type: equality on numbers, text, booleans, dates and complex types; the relational operators (`<`, `<=`, `>`, `>=`, `<>`) on numbers, dates and complex subfields but **not on text**; `Filter` and `LookUp`; `StartsWith` on text; `Sort` and `SortByColumns` except on complex columns. Notable by absence: `Not` does not delegate, `Search` does not delegate, `IsBlank` does not delegate, the system fields around ID (Name, Path, ContentType, VersionNumber) generally do not, and the ID column itself delegates **only** equality, so `ID > 4000` runs locally.
+
+The documented `IsBlank` workaround carries a limit that keeps getting dropped in the retelling. `Filter(list, Col = Blank())` does delegate, but *"this approach works for the 'equals' operator (`=`) but not the operator for 'not equals' (`<>`)"*. Half a workaround is worse than none, because the half that fails, fails silently.
+
+[**Dataverse delegates**](https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/connections/connection-common-data-service) the widest surface of any standard source: the relational operators on numbers, text and dates, though not on choice columns; `Not`; `Search` on text; and the `in` membership operator across text, choice, number and datetime columns, subject to Dataverse's fifteen-table query limit. It also composes with Dataverse views, so complex filtering can be defined server-side once and reused rather than re-expressed in Power Fx on every screen.
+
+And alone among the standard sources, it delegates **aggregates**. That is the headline. The small print is more useful than the headline.
+
+| Aggregate | Number | Text | Choice | DateTime |
+|---|---|---|---|---|
+| `CountRows`, `CountIf` | Yes | Yes | Yes | Yes |
+| `Sum`, `Min`, `Max`, `Average` | Yes | n/a | n/a | **No** |
+
+`CountRows` returns a cached value, so `CountIf(table, true)` is the documented way to get a live count under fifty thousand rows. Every aggregate is capped at a collection of fifty thousand rows. And aggregates are not supported on views, so the two Dataverse strengths named a paragraph apart do not compose with each other.
+
+None of that retracts the point. A store that can count and total server-side is doing something a filing cabinet cannot. But "Dataverse delegates aggregates" is exactly the kind of sentence that gets repeated without its conditions until somebody builds a dashboard on it.
+
+Two more qualifications, both honest rather than rhetorical. Dataverse's list is broader, not infinite: arithmetic on columns, `Now()` and `Today()` inside date filters, `Trim`, `Len`, `FirstN`, and filtering on the fields of a related record rather than on the lookup itself all still fail to delegate. And both sources share the same simulated-delegation behaviour on `UpdateIf` and `RemoveIf`, which reach 500 records by default and 2,000 at most, on either platform.
+
+Breadth is not a scoreboard, though, and reading it as one misses what the number is for. What [the delegation surface](https://learn.microsoft.com/en-us/power-apps/maker/canvas-apps/delegation-overview) actually measures is how much of your intent the store can execute. A store that can run your filter, your sort, your count and your substring search server-side is participating in the app as a database. A store that can run equality and prefix matching is participating as a filing cabinet with an index card at the front.
+
+That is the category difference, expressed in Power Fx.
+
+<Callout type="note">
+Re-check both connector tables before leaning on them, and say so to whoever reads your design. The SharePoint page reads `ms.date: 2025-03-14` and the Dataverse page `2025-06-19`, which makes them the oldest sources this article rests on, and delegation support moves. Same habit part two recommended for a different reason: a recent-looking page is not a reviewed page, and `ms.date` is the field that tells you which one you are holding.
+</Callout>
+
+## Security and evidence
+
+### Who can see what, and can you prove it
+
+Part one argued that the audit signal, "who is allowed to see this, and would that answer survive a compliance review?", is often the real decision driver. This is where that claim cashes out.
+
+**SharePoint's security model is site-shaped.** Permissions inherit from site to list to item, inheritance can be broken, item-level permissions exist, and individual items can be shared by link. It is genuinely flexible, and for its category, a team's shared material, it is the right amount of machinery. Its boundaries are worth naming precisely:
+
+- **Granularity stops at the item.** Permissions are documented at site, list and item level, and there is no layer beneath. Dataverse has [column-level security profiles](https://learn.microsoft.com/en-us/power-platform/admin/field-level-security) governing read and update on individual columns independently of record access: the salary column locked while the row itself stays visible. If a requirement needs that distinction, SharePoint's model has nowhere to express it.
+- **Item-level uniqueness scales badly by design.** The supported ceiling is 50,000 unique permissions per list or library, and Microsoft's *recommended* limit is 5,000. Every broken inheritance is also a thing somebody will have to explain later.
+- **Sharing links are a governance hazard in exactly the way you would expect.** They get created ad hoc, they proliferate, and "who currently has access to this item?" becomes a question with no cheap answer.
+- **Views are not a security boundary.** Everybody knows this. Solutions ship pretending otherwise anyway.
+
+**Dataverse's security model is role-shaped.** [Security roles](https://learn.microsoft.com/en-us/power-platform/admin/security-roles-privileges) bundle privileges (create, read, write, delete, append, append to, assign, share) per table, and each privilege carries an access level: organization, parent and child business units, business unit, user, or none. Records are owned by users or teams. [Business units](https://learn.microsoft.com/en-us/power-platform/admin/wp-security-cds) define the hierarchy those access levels range over. [Manager and position hierarchies](https://learn.microsoft.com/en-us/power-platform/admin/hierarchy-security) extend access along reporting lines. Column security profiles lock individual fields independently of record access. Sharing exists too, as the documented exception mechanism rather than the primary one.
+
+Two properties deserve naming because they cut both ways.
+
+Permissions are **additive. The most permissive grant wins, and there is no deny.** A user holding two roles gets the union of them, which is what makes the model powerful and what makes sloppy role design silently generous.
+
+And column security carries an exemption that matters to anyone reading it as a compliance guarantee. It applies organization-wide, and **system administrators are exempt from it**. The data is never hidden from them. If the requirement is "this field must be invisible to everyone without a business need", column security is a control, not a proof.
+
+The model's power also arrives with real administration cost. Business units, roles, teams and column security profiles are a system somebody has to design, document and maintain. There are projects where that machinery is overhead the requirement never justifies, which is this section's version of the article's thesis. Role-based security is not "more secure" in the abstract. It answers one specific question: does access to this data depend on *who someone is in the organization*, or on *whether they belong to the team*? If the first, you want roles. If the second, a site's membership list is not a deficiency. It is a fit.
+
+<Decision kind="flips">The population is one team and the sensitivity is uniform. Everyone who can open the site should see every row and every column, now and after the next reorganization. Site-shaped security is not a downgrade there, it is the correct shape, and a business unit hierarchy standing over a fifteen-person team is a maintenance burden protecting nothing.</Decision>
+
+### The record of what happened
+
+Part one's other load-bearing claim was auditability. The honest picture is more balanced than this series' instincts might suggest, and the balance is worth stating properly rather than conceding in a clause.
+
+**SharePoint** gives you **version history** per item: field-level diffs, on by default, answering "what changed and who changed it" for any single item at a glance. It is a genuinely excellent user-facing feature and Dataverse has nothing that competes with it on those terms. Deleted items pass through a two-stage recycle bin with **93 days** of recoverability, a period spanning both stages, with items purged from the second stage going immediately rather than waiting out a remainder. Beyond that, [Microsoft states](https://learn.microsoft.com/en-us/sharepoint/sharepoint-data-deletion) that *"SharePoint retains backups of all content for 14 more days beyond actual deletion to facilitate a full site collection restore"*, after which the data is not recoverable. Layered above all of it sits the Microsoft 365 compliance estate: retention labels and policies that can declare items records, preserve them for years, and route deletions through a Preservation Hold library invisible to users; and the [Purview unified audit log](https://learn.microsoft.com/en-us/purview/audit-log-retention-policies), which retains SharePoint activity for 180 days at the standard tier, one year for E5-covered workloads, and up to ten years with the add-on.
+
+**Dataverse** gives you [platform auditing](https://learn.microsoft.com/en-us/power-platform/admin/manage-dataverse-auditing): opt-in at the environment, then per table and per column, recording creates, updates and deletes with old and new values, in a store billed against log capacity rather than database capacity, carrying a retention policy defaulting to forever (the documented custom maximum is 24,855 days, about sixty-eight years).
+
+Reads are a separate matter, and this is the claim most often stated backwards, including in the first draft of this article. Dataverse auditing does not capture them. The documentation is explicit that *"auditing doesn't support retrieve operations or export operations."* Logging who read a record is a different feature, activity logging, enabled at the environment level, and its destination is the Microsoft Purview compliance portal, for production environments only.
+
+For recovery, Dataverse keeps [system backups](https://learn.microsoft.com/en-us/power-platform/admin/backup-restore-environments) of every environment for **seven days**, extendable to 14, 21 or 28 for production managed environments, alongside a [recycle bin](https://learn.microsoft.com/en-us/power-platform/guidance/adoption/data-retention) for recently deleted records and long-term retention policies for archiving tables.
+
+Now the comparison neither camp usually makes.
+
+For **"prove what happened to this record, for years, to an auditor"**, both are strong, and SharePoint's retention-label machinery is arguably the more mature compliance instrument.
+
+For **"show a user what this item looked like last Tuesday"**, SharePoint wins outright. Dataverse auditing is an administrator's tool, not a user-facing undo.
+
+For **"prove who *read* this record"**, the question regulated environments actually get asked, both platforms route you to the same place. SharePoint's read events reach the Purview unified audit log. Dataverse's reach it too, through activity logging rather than through auditing, and only from production environments. The difference is not that one has a native read audit while the other borrows a general-purpose one. It is that Dataverse lets you decide per table and per column what is worth recording before anything reaches Purview, where SharePoint's granularity is the workload. That is a real difference in control and a considerably smaller one than "native versus general-purpose" implies.
+
+For **"restore yesterday's state"**, Dataverse's seven-day window is genuinely short, and both platforms hand the long horizon to the compliance and archiving layer rather than to the operational one.
+
+The category point, once more: SharePoint's history features protect *items a team is working on*. Dataverse's audit features evidence *a system of record*. A requirements document that says "must be auditable" is not finished being specified until it says which of those it means.
+
+## The licensing shape
+
+Per this site's standing rule, shape rather than rates, and only the structural facts.
+
+SharePoint is a **standard connector**. The Power Apps use rights seeded in Microsoft 365 cover canvas apps and flows living entirely on standard connectors, and SharePoint, Outlook, Teams, Excel Online and OneDrive all sit in that tier.
+
+Dataverse is a **premium connector**, and premium is viral. One premium connector, premium action or premium control anywhere in an app, including inside a flow the app calls, makes the whole app premium for its users under the standard per-user and per-app plan shapes. The edges matter before the invoice does: flows licensed per-process rather than per-user, Dynamics 365 licences that already carry Dataverse use rights, pay-as-you-go meters, and the scoped Dataverse for Teams runtime each change the arithmetic without changing the shape. Model-driven apps are built exclusively on Dataverse, so they sit on the premium side of the line always.
+
+Entitlement is who may run the app. Capacity is what it costs to keep the data, and the licensing shape is not fully stated until it covers both.
+
+[Dataverse capacity](https://learn.microsoft.com/en-us/power-platform/admin/capacity-storage) is tenant-pooled and metered three ways: **database** for rows, metadata and search indexes; **file** for attachments and images; **log** for audit history and elastic tables. The pool accrues from a base tenant grant plus per-licence accruals, though not every licence accrues, and it grows only by add-on purchase or a pay-as-you-go meter. Notice where the audit posture from the evidence section lands: audit history bills against log capacity, and a retention policy defaulting to forever is a meter that only goes up. Overage has teeth, in tiers. Admins get warned as the pool thins, and a tenant in overage loses admin operations, including creating, copying, restoring and recovering environments, until it frees storage, buys capacity, or meters the excess. Even an environment with no database consumes a gigabyte.
+
+SharePoint storage is also tenant-pooled, a base terabyte plus a per-licence accrual, but it is [the pool the organization already funds for collaboration](https://learn.microsoft.com/en-us/office365/servicedescriptions/sharepoint-online-service-description/sharepoint-online-limits), and list rows barely dent it. Text is small; the real spend is documents and attachments, which is what the pool exists to hold anyway. Sustained overage can eventually put a tenant read-only, but a team's list is rarely what put it there.
+
+The shape of the consequence, on both axes: with SharePoint, the marginal cost of the data store is zero against licences most organizations already hold, drawing on a storage pool they already fund. With Dataverse, the data store *is* the licensing event twice over: in the common shapes, every user of every app that touches it needs a premium entitlement from somewhere, whether that is a plan, a Dynamics licence that includes it, or a meter, and the data itself joins three capacity meters somebody now watches for the life of the system.
+
+That is a real and sometimes decisive input to the category decision. It is also exactly why the "just use Dataverse for everything" reflex fails in practice. It converts a large number of cheap, correct lists into expensive, unnecessary databases.
+
+<Callout type="note">
+Shape, not rates. Entitlements and plan mechanics get revised on a cadence no article survives, so price this against [current licensing documentation](https://learn.microsoft.com/en-us/power-platform/admin/pricing-billing-skus) and your own landscape rather than trusting the implication as stated by anybody, this article included.
+</Callout>
+
+## The smell: a database rebuilt in a list
+
+A solution starts as a list. It grows a lookup column. Then a junction list. Then a flow that "keeps things in sync". Then a second flow that repairs what the first one missed. Then item-level permissions by the hundred. Then a canvas app whose formulas exist mostly to enforce invariants the store will not. At some point the team is maintaining a relational database, a transaction log and an authorization system, handwritten in Power Fx and Power Automate, unenforced at the store, tested by nobody, on top of a product that was never asked to do any of it.
+
+Every layer in that stack exists because the requirement needed a data model and got somewhere to put things instead.
+
+The migration cost, when it finally arrives, is not the data. The data moves in an afternoon. It is the enforcement logic, which has to be found first, reverse-engineered out of flows and formulas written by people who have since left, and then rebuilt where it should have lived from the start. That work is rarely estimated before the migration is already approved.
+
+The reverse pathology is rarer and just as real: a Dataverse environment, a security model, a solution pipeline and premium licences all standing behind what turns out to be a shared to-do list for six people. The overhead there is not only money. It is that the tool's gravity pulls a team's habits toward platform administration when what they needed to do was collaborate.
+
+| Smell | What it says the requirement needed |
+|---|---|
+| A flow that repairs what another flow missed | An invariant the store should have been enforcing |
+| A junction list nothing keeps consistent | A real many-to-many relationship |
+| Item-level permissions in the hundreds | Role-based access, not broken inheritance |
+| A gallery that returns different results in production | A query the store could execute |
+| "The view hides it from them" in a security conversation | An access model |
+| A Dataverse environment behind a six-person to-do list | A list |
+
+The last row is the one that gets left out of comparisons like this, and leaving it out is how the reflex forms.
+
+## A worked example
+
+Same composite shape as before. Not a client.
+
+An operations team wants to track supplier corrective actions. Today it is a spreadsheet emailed around. The ask arrives as "put it in SharePoint, we already have it".
+
+Run the test instead of the reflex.
+
+**Invariants.** A corrective action belongs to exactly one audit finding, and a finding cannot close while an action against it is still open. That rule has to hold when a flow closes findings in bulk at quarter end, and it has to hold when a coordinator edits the grid directly. Enforcement in every writer means enforcement inside a flow nobody has read since its author changed teams.
+
+**Access.** Quality engineers see their own plant. Regional managers see the plants reporting to them. The supplier's own contact sees only their findings, through a portal, and must never see the internal cost column on the same record.
+
+**Evidence.** The customer audit asks who viewed a finding before it was reclassified.
+
+**Write paths.** Two apps today, an ERP integration next quarter, a supplier portal after that.
+
+Three of the four say data model and the fourth says it louder. The cost column is field-level, and SharePoint's model has nowhere to put it. Regional visibility is organizational rather than team-shaped. "Who viewed it" is a read-audit question. The reflex was wrong, and it was wrong for reasons that were all knowable in the first meeting.
+
+Now change one thing. The same team wants a register of plant safety walk-throughs: date, who walked, what they noticed, a photo. Everyone in the plant sees all of them. Nothing else reads it. Nobody integrates with it, and nobody ever will, because there is nothing to integrate with.
+
+That is a list. Building it in Dataverse would move four people into premium licensing to store something whose entire requirement is "keep it, version it, show it to the plant". The correct answer is the one already licensed.
+
+**The decision record.**
+
+```
+Requirement:  Supplier corrective actions. Multi-plant, supplier-facing,
+              customer-audited
+Chosen:       Dataverse as system of record. Model-driven for internal
+              users, Power Pages for the supplier contact
+Because:      Invariants must hold across writers (a finding cannot
+              close with an open action against it), access is
+              organizational rather than team-shaped, and one column
+              is restricted independently of its row (internal cost,
+              hidden from the supplier)
+Jobs owned:   Business units, roles and teams to design, document and
+              maintain for the life of the application
+              Column security profile on the cost column, with the
+              system-administrator exemption written into the control
+              description rather than discovered during the audit
+              Auditing enabled per table and per column, deliberately,
+              rather than switched on everywhere and paid for forever
+              Read logging is activity logging, not auditing, and it
+              lands in Purview from production environments only
+Flips it:     The supplier portal is cut and the regional hierarchy
+              flattens to a single plant. Then access is team-shaped,
+              the restricted column has nobody left to hide from,
+              and a list is the honest answer
+Deferred:     Seven-day backup window against the customer's stated
+              recovery expectation. A long-term retention policy
+              question, not a store-selection one
+```
+
+The store was never the hard part. The four questions are, and every one of them is answerable before anything gets built.
+
+## The test
+
+For the requirement in front of you, in this order, because the first two carry the most weight.
+
+1. **Does the data have invariants the store must enforce?** Relationships that have to hold, totals that have to agree, states that have to be valid, regardless of which app, flow or human does the writing. If yes: data model.
+2. **Does access depend on who someone is, rather than which team they are in?** Row visibility along organizational lines, field-level sensitivity, access that has to be provable. If yes: data model.
+3. **Must you evidence what happened, possibly including who looked?** System-of-record audit with a defined retention period. If yes: data model. If the honest answer is instead "users need to see and restore previous versions", that points the other way.
+4. **Will the write paths multiply?** More apps, more flows, more integrations over time. Every new write path either re-implements the list's unwritten rules or does not. The trend line matters more than today's count.
+5. **Or is it, on inspection, a team keeping a list?** Tracking, reference data, requests, registers, the long tail of departmental CRUD. Shared, versioned, permissioned by team membership, replaceable without ceremony. If yes, a SharePoint list is not a compromise. It is the correct category, it is already licensed, and building it in Dataverse is the error.
+
+Notice what the test never asks: which product is better. That question got retired at the top of the article, and good riddance.
+
+<Decision kind="recommend">Name the category out loud in the design review, before anybody names a product. "This requirement needs a data model" and "this requirement needs somewhere to keep a list" are both positions a room can argue with. "Let's use Dataverse" is a preference wearing a decision's clothes, and it is the sentence that ends with a list rebuilt as a database, or a database rebuilt as a list.</Decision>
+
+Part one chose a component. Part two priced the choice. This one argues that underneath both sits a category question most comparisons skip, which is why so many of them read as "SharePoint bad, Dataverse good". That verdict is unfair to SharePoint, which serves a real and enormous class of problems exactly as designed. It is worse than unfair to the reader, because it teaches them to reach for a database when they need a list and, more subtly, to keep extending a list long after it needed to be a database.
+
+The skill this series keeps circling is not component selection. It is hearing a requirement and knowing which of the two promises it is asking for.
+
+## Coming next
+
+Architecture Signals takes one decision at a time and goes deep. Next up:
+
+- Designing Dataverse security, which is the job this article just handed you: business units, roles, teams, and an additive model with no deny that makes generous access easy to build by accident
