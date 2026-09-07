@@ -1,0 +1,72 @@
+---
+title: "Support Ticket Lab"
+description: "Build a Dataverse-backed support ticket system from schema to surface: data model, model-driven app, validation rules, calculated fields, and a final integration test."
+date: "2026-08-15"
+category: "Labs"
+tags:
+  - Power Platform
+  - Dataverse
+  - Model-Driven Apps
+  - Hands-On
+featured: true
+status: "published"
+---
+
+This lab builds a support ticket system the way a real implementation should start: schema-first. You will design a Dataverse data model, surface it in a model-driven app, and layer on the validation and calculation logic that keeps the data honest.
+
+By the end you will have a working ticket system and, more importantly, a pattern you can apply to any relational business requirement.
+
+## What you will build
+
+A support ticket system with:
+
+- **Tickets** linked to customers and support agents
+- **Ticket updates** as a child table with automatic timestamps
+- **Status and priority lookups** as reference data
+- **Business rules** that enforce state transitions and required fields
+- **Calculated and rollup fields** that summarize ticket history
+
+## Modules
+
+### Module 1: The Data Model
+
+Design the Dataverse schema that everything else rests on. You will create the core tables, establish relationships, and configure the alternate keys and constraints that make the model self-enforcing.
+
+**Time:** About 1 hour to a clean stopping point.
+
+[Start Module 1: The Data Model →](/labs/support-ticket-lab/support-ticket-data-model)
+
+---
+
+### Module 2: The Model-Driven App
+
+*Coming soon* — Build the model-driven app that surfaces the data model. Forms, views, dashboards, and the sitemap that ties them together.
+
+---
+
+### Module 3: Validation Rules
+
+*Coming soon* — Add business rules and server-side validation that enforce state transitions: a resolved ticket cannot reopen without a reason, priority changes require a note, and so on.
+
+---
+
+### Module 4: Calculations and Rollups
+
+*Coming soon* — Configure calculated fields for response time and resolution time, and rollup fields that summarize ticket counts and averages at the customer level.
+
+---
+
+### Module 5: Final Integration Test
+
+*Coming soon* — Verify the system end-to-end: create tickets, update them through the workflow, and confirm that every rule and calculation fires as designed.
+
+## Prerequisites
+
+- A Power Platform environment with Dataverse (a developer environment works)
+- Maker permissions in that environment
+- Basic familiarity with Dataverse tables and relationships (the first two articles in Architecture Signals cover the concepts)
+
+## Related reading
+
+- [Dataverse or SharePoint: Is There a Data Model Here?](/articles/dataverse-or-sharepoint) — The category question this lab answers in practice
+- [Choosing the Right Power Platform Component](/articles/choosing-the-right-power-platform-component) — Signal-based component selection
